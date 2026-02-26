@@ -133,14 +133,50 @@ def net_panel() -> Panel:
     return Panel(table, title="[bold blue]Network I/O[/]", border_style="blue")
 
 
+def _docker_panel(msg: str) -> Panel:
+    """Wrap a short message in a Docker-themed panel."""
+    return Panel(
+        Text(msg, style="dim italic"),
+        title="[bold #ff6ac1]Docker Containers[/]",
+        border_style="#ff6ac1",
+    )
+
+
+def _docker_container_row(table: Table, line: str) -> None:
+    """Parse one JSON line from 'docker ps' and append a row to *table*."""
+    try:
+        c = json.loads(line)
+    except json.JSONDecodeError:
+        return
+    status = c.get("Status", c.get("State", ""))
+    color = "green" if "Up" in status else "yellow"
+    ports = c.get("Ports", "")
+    if len(ports) > 40:
+        ports = ports[:37] + "..."
+    table.add_row(
+        c.get("Names", "?")[:20],
+        c.get("Image", "?")[:25],
+        f"[{color}]{status[:25]}[/]",
+        ports,
+    )
+
+
+def _docker_table(lines: list[str]) -> Panel:
+    """Build the Docker container table from parsed JSON lines."""
+    table = Table(expand=True, show_header=True, header_style="bold #ff6ac1")
+    table.add_column("Name", style="white", no_wrap=True, ratio=2)
+    table.add_column("Image", ratio=2)
+    table.add_column("Status", ratio=2)
+    table.add_column("Ports", ratio=3)
+    for line in lines:
+        _docker_container_row(table, line)
+    return Panel(table, title="[bold #ff6ac1]Docker Containers[/]", border_style="#ff6ac1")
+
+
 def docker_panel() -> Panel:
     """Running Docker containers via 'docker ps'."""
     if not shutil.which("docker"):
-        return Panel(
-            Text("docker not found in PATH", style="dim italic"),
-            title="[bold #ff6ac1]Docker Containers[/]",
-            border_style="#ff6ac1",
-        )
+        return _docker_panel("docker not found in PATH")
     try:
         result = subprocess.run(
             ["docker", "ps", "--format", "json"],
@@ -148,47 +184,13 @@ def docker_panel() -> Panel:
         )
         if result.returncode != 0:
             msg = result.stderr.strip().split("\n")[0] if result.stderr else "docker returned an error"
-            return Panel(
-                Text(msg[:80], style="dim italic"),
-                title="[bold #ff6ac1]Docker Containers[/]",
-                border_style="#ff6ac1",
-            )
-        table = Table(expand=True, show_header=True, header_style="bold #ff6ac1")
-        table.add_column("Name", style="white", no_wrap=True, ratio=2)
-        table.add_column("Image", ratio=2)
-        table.add_column("Status", ratio=2)
-        table.add_column("Ports", ratio=3)
+            return _docker_panel(msg[:80])
         lines = result.stdout.strip().splitlines()
         if not lines or not lines[0]:
-            return Panel(
-                Text("No running containers", style="dim italic"),
-                title="[bold #ff6ac1]Docker Containers[/]",
-                border_style="#ff6ac1",
-            )
-        for line in lines:
-            try:
-                c = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            status = c.get("Status", c.get("State", ""))
-            color = "green" if "Up" in status else "yellow"
-            ports = c.get("Ports", "")
-            # Truncate long port mappings
-            if len(ports) > 40:
-                ports = ports[:37] + "..."
-            table.add_row(
-                c.get("Names", "?")[:20],
-                c.get("Image", "?")[:25],
-                f"[{color}]{status[:25]}[/]",
-                ports,
-            )
-        return Panel(table, title="[bold #ff6ac1]Docker Containers[/]", border_style="#ff6ac1")
+            return _docker_panel("No running containers")
+        return _docker_table(lines)
     except Exception:
-        return Panel(
-            Text("Could not query Docker", style="dim italic"),
-            title="[bold #ff6ac1]Docker Containers[/]",
-            border_style="#ff6ac1",
-        )
+        return _docker_panel("Could not query Docker")
 
 
 def gpu_panel() -> Panel:

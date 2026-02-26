@@ -452,3 +452,22 @@ class TestBuildLayout:
         expected = {"header", "cpu", "mem", "disk", "proc", "net", "gpu"}
         for name in expected:
             assert layout[name] is not None
+
+
+# ---------------------------------------------------------------------------
+# --once subprocess exit code
+# ---------------------------------------------------------------------------
+
+class TestOnceSubprocess:
+    """Running sysglance.py --once as a subprocess should exit cleanly."""
+
+    def test_once_exits_with_rc_zero(self):
+        result = subprocess.run(
+            [sys.executable, "sysglance.py", "--once"],
+            capture_output=True,
+            timeout=30,
+        )
+        assert result.returncode == 0, (
+            f"sysglance.py --once exited with rc={result.returncode}\n"
+            f"stderr: {result.stderr.decode()}"
+        )
