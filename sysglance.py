@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""sysglance — a terminal system dashboard powered by Rich."""
+"""sysglance — a terminal system dashboard powered by Rich.
+
+Version: 0.2.0
+Author: Collective
+"""
+
+__version__ = '0.2.0'
 
 import argparse
 import json
