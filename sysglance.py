@@ -2,6 +2,7 @@
 """sysglance — a terminal system dashboard powered by Rich."""
 
 import argparse
+import json
 import shutil
 import subprocess
 import time
@@ -132,6 +133,64 @@ def net_panel() -> Panel:
     return Panel(table, title="[bold blue]Network I/O[/]", border_style="blue")
 
 
+def docker_panel() -> Panel:
+    """Running Docker containers via 'docker ps'."""
+    if not shutil.which("docker"):
+        return Panel(
+            Text("docker not found in PATH", style="dim italic"),
+            title="[bold #ff6ac1]Docker Containers[/]",
+            border_style="#ff6ac1",
+        )
+    try:
+        result = subprocess.run(
+            ["docker", "ps", "--format", "json"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode != 0:
+            msg = result.stderr.strip().split("\n")[0] if result.stderr else "docker returned an error"
+            return Panel(
+                Text(msg[:80], style="dim italic"),
+                title="[bold #ff6ac1]Docker Containers[/]",
+                border_style="#ff6ac1",
+            )
+        table = Table(expand=True, show_header=True, header_style="bold #ff6ac1")
+        table.add_column("Name", style="white", no_wrap=True, ratio=2)
+        table.add_column("Image", ratio=2)
+        table.add_column("Status", ratio=2)
+        table.add_column("Ports", ratio=3)
+        lines = result.stdout.strip().splitlines()
+        if not lines or not lines[0]:
+            return Panel(
+                Text("No running containers", style="dim italic"),
+                title="[bold #ff6ac1]Docker Containers[/]",
+                border_style="#ff6ac1",
+            )
+        for line in lines:
+            try:
+                c = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            status = c.get("Status", c.get("State", ""))
+            color = "green" if "Up" in status else "yellow"
+            ports = c.get("Ports", "")
+            # Truncate long port mappings
+            if len(ports) > 40:
+                ports = ports[:37] + "..."
+            table.add_row(
+                c.get("Names", "?")[:20],
+                c.get("Image", "?")[:25],
+                f"[{color}]{status[:25]}[/]",
+                ports,
+            )
+        return Panel(table, title="[bold #ff6ac1]Docker Containers[/]", border_style="#ff6ac1")
+    except Exception:
+        return Panel(
+            Text("Could not query Docker", style="dim italic"),
+            title="[bold #ff6ac1]Docker Containers[/]",
+            border_style="#ff6ac1",
+        )
+
+
 def gpu_panel() -> Panel:
     """NVIDIA GPU utilization via nvidia-smi."""
     if not shutil.which("nvidia-smi"):
@@ -225,6 +284,7 @@ def build_layout() -> Layout:
     )
     layout["right"].split_column(
         Layout(name="proc"),
+        Layout(name="docker"),
         Layout(name="gpu"),
     )
     return layout
@@ -238,6 +298,7 @@ def refresh_panels(layout: Layout) -> None:
     layout["disk"].update(disk_panel())
     layout["proc"].update(proc_panel())
     layout["net"].update(net_panel())
+    layout["docker"].update(docker_panel())
     layout["gpu"].update(gpu_panel())
 
 
